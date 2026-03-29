@@ -1,0 +1,365 @@
+Below is a **detailed Backend PRD (no AI) for WallMind MVP**. It is written so you can **directly implement** without overthinking.
+
+---
+
+# 🧾 BACKEND PRD — WALLMIND (MVP, NO AI)
+
+---
+
+# 🎯 1. Goal
+
+Build a backend that:
+
+```text id="goal"
+Accepts floor plan image → extracts geometry → applies rule-based material logic → returns 3D-ready JSON
+```
+
+---
+
+# 🧱 2. Tech Stack
+
+* **Runtime:** Node.js
+* **Framework:** Express.js
+* **File Upload:** Multer
+* **Parser Engine:** Python (OpenCV) OR mock JSON
+* **DB:** None (MVP)
+* **Communication:** REST API
+
+---
+
+# 🏗️ 3. High-Level Architecture
+
+```text id="arch"
+Client (React + Three.js)
+        ↓
+Express API Server
+        ↓
+Parser Service (Python or Mock)
+        ↓
+Material Logic Service
+        ↓
+Response (JSON)
+```
+
+---
+
+# 📦 4. Modules Breakdown
+
+---
+
+## 🔹 4.1 API Layer (Routes)
+
+### 1. Parse Floor Plan
+
+```http id="api_parse"
+POST /api/parse
+```
+
+**Purpose:**
+Upload image → process → return structured data
+
+---
+
+### 2. Health Check
+
+```http id="api_health"
+GET /api/health
+```
+
+---
+
+---
+
+## 🔹 4.2 Controller Layer
+
+### parseController.js
+
+**Responsibilities:**
+
+* Validate request
+* Handle file upload
+* Call parser service
+* Call material service
+* Format response
+
+---
+
+## 🔹 4.3 Service Layer
+
+### A. Parser Service
+
+**Input:**
+
+* Image file path
+
+**Output:**
+
+```json id="parser_output"
+{
+  "walls": [
+    { "x1": 0, "y1": 0, "x2": 5, "y2": 0 }
+  ]
+}
+```
+
+---
+
+### B. Material Service
+
+**Input:**
+
+* Structured walls
+
+**Output:**
+
+```json id="material_output"
+[
+  {
+    "wallId": 1,
+    "options": ["RCC", "Red Brick"]
+  }
+]
+```
+
+---
+
+## 🔹 4.4 Utility Layer
+
+* Geometry utils (distance, classification)
+* File cleanup
+
+---
+
+# 🔄 5. Request → Response Flow
+
+```text id="flow"
+Client uploads image
+        ↓
+Multer saves file
+        ↓
+Controller triggers parser
+        ↓
+Parser returns wall coordinates
+        ↓
+Material service applies rules
+        ↓
+Response sent as JSON
+```
+
+---
+
+# 📥 6. API Contract (Detailed)
+
+---
+
+## POST /api/parse
+
+### Request
+
+* Content-Type: multipart/form-data
+* Field: `file`
+
+---
+
+### Response
+
+```json id="response"
+{
+  "status": "success",
+  "data": {
+    "walls": [
+      {
+        "id": 1,
+        "start": [0, 0],
+        "end": [5, 0],
+        "length": 5,
+        "type": "outer"
+      }
+    ],
+    "materials": [
+      {
+        "wallId": 1,
+        "options": ["RCC", "Red Brick"]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Error Response
+
+```json id="error"
+{
+  "status": "error",
+  "message": "Invalid file type"
+}
+```
+
+---
+
+# 🧠 7. Core Logic
+
+---
+
+## 🔹 7.1 Geometry Processing
+
+### Wall Length
+
+```js id="len"
+Math.sqrt((x2-x1)**2 + (y2-y1)**2)
+```
+
+---
+
+## 🔹 7.2 Wall Classification
+
+**Simple MVP logic:**
+
+* Long boundary walls → outer
+* Short/internal → inner
+
+```js id="classify"
+if (length > threshold) → outer
+else → inner
+```
+
+---
+
+## 🔹 7.3 Material Rules
+
+| Wall Type | Materials                |
+| --------- | ------------------------ |
+| Outer     | RCC, Red Brick           |
+| Inner     | AAC Block, Fly Ash Brick |
+
+---
+
+# 📂 8. Folder Structure
+
+```text id="structure"
+/server
+  /controllers
+    parseController.js
+  /routes
+    parseRoutes.js
+  /services
+    parserService.js
+    materialService.js
+  /utils
+    geometry.js
+  /uploads
+  app.js
+  server.js
+```
+
+---
+
+# 🔧 9. File Handling
+
+* Use Multer:
+
+```js id="multer"
+dest: "uploads/"
+```
+
+* File lifecycle:
+
+  1. Upload
+  2. Process
+  3. Delete (optional)
+
+---
+
+# ⚙️ 10. Parser Integration
+
+### Option A (Real)
+
+```js id="python"
+exec("python parser/main.py filePath")
+```
+
+---
+
+### Option B (Mock for speed)
+
+```js id="mock"
+return {
+  walls: [
+    { x1: 0, y1: 0, x2: 5, y2: 0 }
+  ]
+}
+```
+
+---
+
+# 🚨 11. Edge Cases
+
+| Case            | Handling             |
+| --------------- | -------------------- |
+| No file         | 400 error            |
+| Invalid format  | Reject               |
+| Parser fails    | Return fallback JSON |
+| Empty detection | Return message       |
+
+---
+
+# ⚡ 12. Performance Constraints
+
+* Max file size: 5MB
+* Response time: < 3 sec
+
+---
+
+# 🔐 13. Security
+
+* Validate MIME type
+* Limit file size
+* Prevent path traversal
+
+---
+
+# 🧪 14. Testing
+
+### Test Cases:
+
+* Valid image → success
+* Invalid file → error
+* Parser crash → fallback
+* Empty result → handled
+
+---
+
+# 🚀 15. Deployment Readiness
+
+* Works locally via `npm run dev`
+* No DB dependency
+* Easily deployable
+
+---
+
+# 🧠 16. MVP Success Definition
+
+Backend is successful if:
+
+* API works ✅
+* Returns structured JSON ✅
+* Frontend can render walls ✅
+* Material logic works ✅
+
+---
+
+# 🔥 Final Reality
+
+This backend is:
+
+* Minimal
+* Fast to build
+* Enough to demo full pipeline
+
+---
+
+If you want next:
+I can give you
+👉 **full working backend code (Express + routes + controller + mock parser)** so you can run it immediately.

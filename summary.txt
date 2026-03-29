@@ -1,0 +1,99 @@
+🔥 Problem Statement Summary — ASIS
+🎯 Core Idea
+
+Build a backend system that:
+
+Takes a floor plan image → understands structure → generates 3D model → suggests materials
+🧠 What the System Must Do
+1. 📥 Input
+Floor plan image (PNG/JPG)
+2. ⚙️ Processing Pipeline (5 Stages)
+Stage 01 — Floor Plan Parsing
+Detect:
+walls
+rooms
+doors/windows
+Convert image → structured geometry
+Stage 02 — Geometry Reconstruction
+Convert geometry → graph (nodes + edges)
+Classify:
+load-bearing walls
+partition walls
+Compute spans (distance between supports)
+Stage 03 — 3D Model Generation
+Convert 2D plan → 3D model
+Extrude walls
+Add height
+Generate:
+Three.js JSON (main)
+GLTF/OBJ (optional)
+Stage 04 — Material Analysis
+Recommend materials based on:
+strength
+durability
+cost
+
+Formula:
+
+score = strength + durability - cost
+Apply different weights for:
+load-bearing walls
+partitions
+slabs
+Stage 05 — Report Generation
+Combine everything into one JSON:
+3D model + materials + structural insights
+🌐 API Requirements
+Main Endpoint
+POST /analyse
+Input:
+floor plan image
+Output:
+full analysis report
+Other Endpoints
+GET /materials
+GET /health
+GET /session/:id
+💾 Data Handling
+Store:
+uploaded images
+analysis results
+Use:
+in-memory or temporary storage
+Session-based system (UUID)
+⚠️ Constraints
+Must work within 36 hours
+Must handle 3 sample plans (A, B, C)
+No AI/LLM required
+Focus on deterministic logic
+⚡ Output Requirements
+
+Final output must include:
+
+1. 3D Model (viewable in browser)
+2. Material recommendations
+3. Structural warnings (if any)
+🧠 Key Engineering Challenges
+Image → geometry detection (hardest part)
+Correct wall classification
+Clean 3D generation
+Logical material ranking
+🚨 What Makes This Project Special
+
+This is NOT just:
+
+image upload project ❌
+
+This is:
+
+computer vision + geometry + 3D + engineering logic ✅
+🏁 Success Criteria
+
+System is complete when:
+
+Image → processed correctly
+3D model loads without error
+Materials are ranked properly
+API works end-to-end
+⚡ One-Line Summary
+Convert a 2D floor plan image into a structured 3D model with intelligent material recommendation
