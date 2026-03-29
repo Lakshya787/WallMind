@@ -6,8 +6,10 @@ const app = express();
 
 // ✅ Robust CORS setup
 const allowedOrigins = [
-  "http://localhost:5173"
-];
+  "http://localhost:5173",
+  "http://localhost:5174", // Added this because your frontend started on port 5174
+  process.env.FRONTEND_URL // Setup this env var in Render
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
