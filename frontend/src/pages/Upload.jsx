@@ -105,11 +105,13 @@ export default function Upload() {
       await simulateStep(4);
       setActiveStep(5); // all done
 
-      if (response.data.success && response.data.analysis?._id) {
-        setTimeout(() => navigate(`/analysis/${response.data.analysis._id}`), 500);
+      const createdId = response.data.analysis?._id || response.data.analysisId || response.data._id;
+
+      if (response.data.success && createdId) {
+        setTimeout(() => navigate(`/analysis/${createdId}`), 500);
       } else if (response.data.success && response.data.report) {
-        // Some backends return the report directly
-        setTimeout(() => navigate(`/analysis/${response.data._id || 'result'}`, { state: { report: response.data.report } }), 500);
+        // Fallback for returning report without a saved ID
+        setTimeout(() => navigate(`/analysis/result`, { state: { report: response.data.report } }), 500);
       } else {
         throw new Error('Unexpected response from server.');
       }

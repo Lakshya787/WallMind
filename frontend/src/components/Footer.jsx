@@ -15,7 +15,7 @@ const Footer = () => {
           </div>
           
           <div className="text-center text-slate-500 text-xs font-medium">
-            Intelligent Floor Plan Analysis MVP. Built for Google Promptathon 2026.
+            Intelligent Floor Plan Analysis MVP. Built for Promptathon 2026.
           </div>
 
           <div className="flex items-center space-x-4">

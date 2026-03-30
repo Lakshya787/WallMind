@@ -11,17 +11,21 @@ const userSchema = new mongoose.Schema(
 
   email: {
     type: String,
-    required: true,
-    unique: true,
     lowercase: true,
     trim: true,
+    sparse: true,
     match: [/^\S+@\S+\.\S+$/, "Invalid email"]
   },
 
   password: {
     type: String,
-    required: true,
     minlength: 6
+  },
+
+  publicKey: {
+    type: String,
+    sparse: true,
+    unique: true
   },
 
   avatar: {
@@ -51,6 +55,11 @@ const userSchema = new mongoose.Schema(
   isVerified: {
     type: Boolean,
     default: false
+  },
+
+  credits: {
+    type: Number,
+    default: 5
   },
 
   resetPasswordToken: String,

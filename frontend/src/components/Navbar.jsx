@@ -2,6 +2,8 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Compass, LogOut, User, PlusCircle, LayoutDashboard } from 'lucide-react';
+import CreditsManager from './CreditsManager';
+import AccountLinker from './AccountLinker';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -11,6 +13,13 @@ const Navbar = () => {
     await logout();
     navigate('/login');
   };
+
+  // Show truncated public key as subtitle when user signed up via wallet (no email)
+  const userSubtitle = user?.email
+    ? user.email
+    : user?.publicKey
+      ? `${user.publicKey.slice(0, 6)}...${user.publicKey.slice(-4)}`
+      : null;
 
   return (
     <nav className="glass sticky top-0 z-50 border-b border-slate-800/60 shadow-lg shadow-black/20">
@@ -44,12 +53,24 @@ const Navbar = () => {
           </div>
 
           {/* Auth Actions */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             {user ? (
-              <div className="flex items-center space-x-4">
-                <div className="hidden sm:flex flex-col items-end mr-2">
+              <div className="flex items-center space-x-3">
+                {/* Wallet: link wallet / add email controls */}
+                <AccountLinker />
+
+                {/* Credits badge + buy button */}
+                <CreditsManager />
+
+                {/* Vertical divider */}
+                <div className="h-8 w-px bg-slate-700/60" />
+
+                {/* User identity */}
+                <div className="hidden sm:flex flex-col items-end">
                   <span className="text-sm font-semibold text-white leading-none tracking-wide">{user.username}</span>
-                  <span className="text-xs text-slate-400 mt-1">{user.email}</span>
+                  {userSubtitle && (
+                    <span className="text-xs text-slate-400 mt-1 font-mono">{userSubtitle}</span>
+                  )}
                 </div>
                 <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)] border border-slate-700/50 hover:border-indigo-500/50 transition-colors cursor-default">
                   <User className="h-5 w-5" />

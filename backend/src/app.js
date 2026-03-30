@@ -28,10 +28,12 @@ app.use(cookieParser());
 
 // Routes
 import authRouter from "./routes/auth.route.js";
-//import userRouter from "./routes/user.route.js";
 import analysisRouter from "./routes/analysis.route.js";
+import paymentRouter from "./routes/payment.route.js";
+
 app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/analysis", analysisRouter)
+app.use("/api/v1/analysis", analysisRouter);
+app.use("/api/v1/payment", paymentRouter);
 //app.use("/api/v1/user", userRouter);
 
 export { app };
