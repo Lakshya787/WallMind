@@ -6,30 +6,17 @@ const app = express();
 
 /**
  * =========================
- * CORS CONFIG (SAFE + WORKING)
+ * CORS CONFIG (ALL ORIGINS ALLOWED FOR HACKATHON/PROD)
  * =========================
  */
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://wall-mind.vercel.app"
-];
-
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (mobile apps, postman, curl)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // ❗ DO NOT throw error → just block silently
-    return callback(null, false);
+    return callback(null, true); // Extremely permissive: allow all origins
   },
   credentials: true
 }));
 
-// handle preflight requests
+// handle preflight requests (sometimes needed if cors plugin gets confused)
 app.options("*", cors());
 
 /**
