@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud, FileImage, X, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
 const PIPELINE_STEPS = [
   { id: 'upload',    label: 'Uploading',              sub: 'Sending image to server' },
@@ -56,6 +57,30 @@ export default function Upload() {
   const [tipsOpen, setTipsOpen]   = useState(false);
   const fileInputRef = useRef(null);
   const navigate     = useNavigate();
+  const { user }     = useAuth();
+
+  if ((user?.credits || 0) <= 0) {
+    return (
+      <div className="flex-grow flex items-center justify-center px-4 py-12 relative overflow-hidden animate-fade-in w-full h-full">
+        <div className="absolute top-[20%] left-[20%] w-[35vw] h-[35vw] rounded-full bg-amber-600/10 filter blur-[130px] pointer-events-none" />
+        <div className="max-w-md w-full glass-card p-10 rounded-3xl text-center border border-amber-500/20 shadow-2xl relative z-10 bg-slate-900/60 backdrop-blur-xl">
+          <div className="w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+            <AlertCircle className="w-8 h-8 text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">Out of Credits</h2>
+          <p className="text-slate-400 font-light mb-8 text-sm">
+            You need at least 1 credit to perform a new floor plan analysis. Please purchase more credits using your Freighter wallet to continue.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-full px-6 py-3 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-700 hover:text-white transition-all border border-slate-700 shadow-md"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];

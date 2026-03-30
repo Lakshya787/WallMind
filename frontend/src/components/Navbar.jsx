@@ -44,10 +44,17 @@ const Navbar = () => {
                   <LayoutDashboard className="w-4 h-4 mr-2 text-indigo-400" />
                   Dashboard
                 </Link>
-                <Link to="/upload" className="text-slate-300 hover:text-white px-4 py-2 rounded-lg hover:bg-slate-800/50 font-medium text-sm flex items-center transition-all duration-200">
-                  <PlusCircle className="w-4 h-4 mr-2 text-blue-400" />
-                  New Analysis
-                </Link>
+                {(user?.credits || 0) > 0 ? (
+                  <Link to="/upload" className="text-slate-300 hover:text-white px-4 py-2 rounded-lg hover:bg-slate-800/50 font-medium text-sm flex items-center transition-all duration-200">
+                    <PlusCircle className="w-4 h-4 mr-2 text-blue-400" />
+                    New Analysis
+                  </Link>
+                ) : (
+                  <span className="text-slate-600 cursor-not-allowed px-4 py-2 rounded-lg font-medium text-sm flex items-center transition-all duration-200" title="You need credits to perform a new analysis">
+                    <PlusCircle className="w-4 h-4 mr-2 opacity-50 text-slate-600" />
+                    New Analysis
+                  </span>
+                )}
               </>
             )}
           </div>

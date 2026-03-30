@@ -188,11 +188,15 @@ export default function Dashboard() {
           </div>
 
           <button
-            onClick={() => navigate('/upload')}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] transition-all transform hover:-translate-y-0.5"
+            onClick={() => (user?.credits || 0) > 0 ? navigate('/upload') : alert('You need at least 1 credit to perform an analysis. Please use the Buy button in the navbar.')}
+            className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all transform hover:-translate-y-0.5 ${
+              (user?.credits || 0) > 0
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)]"
+                : "bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700/50 hover:bg-slate-800/70"
+            }`}
           >
             <PlusCircle className="w-5 h-5" />
-            New Analysis
+            {(user?.credits || 0) > 0 ? 'New Analysis' : 'Out of Credits'}
           </button>
         </div>
 
@@ -234,11 +238,15 @@ export default function Dashboard() {
               Upload a 2D floor plan image to extract walls, rooms, openings, and instantly generate a 3D model.
             </p>
             <button
-              onClick={() => navigate('/upload')}
-              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-lg shadow-[0_0_25px_rgba(79,70,229,0.4)] hover:shadow-[0_0_40px_rgba(79,70,229,0.6)] transition-all transform hover:-translate-y-1"
+              onClick={() => (user?.credits || 0) > 0 ? navigate('/upload') : alert('You need at least 1 credit to perform an analysis. Please use the Buy button in the navbar.')}
+              className={`inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg transition-all transform hover:-translate-y-1 ${
+                (user?.credits || 0) > 0
+                  ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_25px_rgba(79,70,229,0.4)] hover:shadow-[0_0_40px_rgba(79,70,229,0.6)]"
+                  : "bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700/50 hover:bg-slate-800/70"
+              }`}
             >
               <PlusCircle className="w-6 h-6" />
-              Upload First Plan
+              {(user?.credits || 0) > 0 ? 'Upload First Plan' : 'Out of Credits'}
             </button>
           </div>
         )}
