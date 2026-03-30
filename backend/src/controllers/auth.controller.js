@@ -51,7 +51,7 @@ export const signup = async (req, res) => {
     });
 
     const verificationURL =
-      `${process.env.FRONTEND_URL}/api/v1/auth/verify-email?token=${rawToken}`;
+      `${process.env.BASE_URL}/api/v1/auth/verify-email?token=${rawToken}`;
 
     // respond immediately, send email in background
     res.status(201).json({
