@@ -8,7 +8,8 @@ const PARSER_PATH = path.resolve(__dirname, "../../parser.py");
 
 export const runParser = (imagePath) => {
   return new Promise((resolve, reject) => {
-    const py = spawn("python", [PARSER_PATH, imagePath]);
+    const pyCmd = process.env.PYTHON_CMD || "python";
+    const py = spawn(pyCmd, [PARSER_PATH, imagePath]);
 
     let stdout = "";
     let stderr = "";

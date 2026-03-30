@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { Compass, Loader2 } from 'lucide-react';
 
 function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -29,39 +30,48 @@ function Login() {
   };
 
   return (
-    <div className="flex-grow flex items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-md border border-gray-100">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900">Sign in</h2>
-          <p className="mt-2 text-sm text-gray-600">Access your account dashboard.</p>
+    <div className="flex-grow flex items-center justify-center px-4 py-12 relative overflow-hidden animate-fade-in">
+      <div className="absolute top-[20%] left-[20%] w-[40vw] h-[40vw] rounded-full bg-blue-600/10 mix-blend-screen filter blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-[20%] right-[20%] w-[30vw] h-[30vw] rounded-full bg-indigo-600/10 mix-blend-screen filter blur-[100px] pointer-events-none" />
+
+      <div className="max-w-md w-full space-y-8 glass-card p-10 rounded-3xl z-10 border border-slate-700/50 shadow-2xl relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
+        <div className="text-center relative z-10">
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20">
+            <Compass className="h-8 w-8 text-white" />
+          </div>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h2>
+          <p className="mt-2 text-sm text-slate-400 font-light">Enter your details to access your dashboard.</p>
         </div>
         
         {error && (
-          <div className="p-4 rounded-md bg-red-50 text-red-700 border border-red-200">
+          <div className="p-4 rounded-xl bg-red-900/30 text-red-200 border border-red-800/50 backdrop-blur-md relative z-10">
             {error}
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
+        <form className="mt-8 space-y-6 relative z-10" onSubmit={handleSubmit}>
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Email address</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
               <input
                 type="email"
                 required
                 disabled={isLoading}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="block w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:opacity-50"
+                placeholder="you@example.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Password</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
               <input
                 type="password"
                 required
                 disabled={isLoading}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="block w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:opacity-50"
+                placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               />
@@ -71,22 +81,19 @@ function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 disabled:opacity-50 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {isLoading ? (
               <span className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" />
                 Signing in...
               </span>
             ) : 'Sign in'}
           </button>
         </form>
-        <div className="text-center text-sm pt-4 border-t border-gray-100">
-          <span className="text-gray-600">Don't have an account? </span>
-          <Link to="/signup" className="font-medium text-blue-600 hover:text-blue-500">Sign up</Link>
+        <div className="text-center text-sm pt-6 border-t border-slate-800/50 relative z-10">
+          <span className="text-slate-400">Don't have an account? </span>
+          <Link to="/signup" className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">Sign up</Link>
         </div>
       </div>
     </div>

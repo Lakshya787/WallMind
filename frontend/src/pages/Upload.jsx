@@ -1,198 +1,253 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, FileImage, X, Loader2, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileImage, X, Loader2, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import api from '../api/axios';
 
-function Upload() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [statusText, setStatusText] = useState('');
-  const fileInputRef = useRef(null);
-  const navigate = useNavigate();
+const PIPELINE_STEPS = [
+  { id: 'upload',    label: 'Uploading',              sub: 'Sending image to server' },
+  { id: 'parse',     label: 'Parsing Floor Plan',     sub: 'Detecting walls, rooms, openings' },
+  { id: 'geometry',  label: 'Geometry Reconstruction',sub: 'Building 3D graph structure' },
+  { id: 'materials', label: 'Material Analysis',      sub: 'Scoring strength, durability, cost' },
+  { id: 'report',    label: 'Generating Report',      sub: 'Compiling structural insights' },
+];
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      if (!selectedFile.type.startsWith('image/')) {
-        setError('Please upload a valid image file (PNG, JPG).');
-        return;
-      }
-      setFile(selectedFile);
-      setPreview(URL.createObjectURL(selectedFile));
-      setError('');
-    }
-  };
-
-  const clearFile = () => {
-    setFile(null);
-    setPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.type.startsWith('image/')) {
-      setFile(droppedFile);
-      setPreview(URL.createObjectURL(droppedFile));
-      setError('');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!file) return;
-
-    setLoading(true);
-    setStatusText('Uploading floor plan...');
-    setError('');
-
-    const formData = new FormData();
-    formData.append('floor_plan', file);
-
-    try {
-      // Step 1: Hit the backend API
-      setStatusText('Processing with WallMind Engine...');
-      let analysisData = null;
-      
-      try {
-        const response = await api.post('/analysis', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        
-        if (response.data.success && response.data.report) {
-          analysisData = response.data.report;
-        }
-      } catch (backendError) {
-        console.warn("Backend parser failed or not connected, using fallback data for demonstration.", backendError);
-        console.warn("Backend parser failed or not connected.", backendError);
-      }
-
-      // Remove mock fallback – if backend does not return a report, show an error instead
-      if (!analysisData) {
-        setError('Failed to obtain analysis data from the server.');
-        setLoading(false);
-        return;
-      }
-
-      // Navigate to the Viewer with the generated/mocked report data
-      // Using navigate state because the endpoint doesn't persist to the DB.
-      navigate('/analysis/viewer', { 
-        state: { 
-          report: analysisData, 
-          image: preview,
-          title: file.name
-        } 
-      });
-
-    } catch (err) {
-      setError(err.message || 'An unexpected error occurred during analysis.');
-      setLoading(false);
-    }
-  };
-
+function PipelineStep({ step, status }) {
+  // status: 'pending' | 'active' | 'done'
   return (
-    <div className="bg-gray-50 py-10">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-8 border-b border-gray-200 bg-gray-50/50">
-            <h1 className="text-2xl font-bold text-gray-900">New Floor Plan Analysis</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Upload a clear 2D floor plan image (.png, .jpg) to securely extract 3D geometries and structural materials.
-            </p>
-          </div>
-
-          <div className="p-8">
-            {error && (
-              <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4 flex">
-                <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5" />
-                <span className="text-red-700 text-sm">{error}</span>
-              </div>
-            )}
-
-            {!file ? (
-              <div 
-                className="mt-2 flex justify-center rounded-xl border-2 border-dashed border-gray-300 px-6 py-16 hover:bg-gray-50 hover:border-blue-400 transition-colors cursor-pointer"
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current.click()}
-              >
-                <div className="text-center">
-                  <UploadCloud className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
-                  <div className="mt-4 flex text-sm leading-6 text-gray-600 justify-center">
-                    <span className="relative cursor-pointer rounded-md bg-transparent font-semibold text-blue-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2 hover:text-blue-500">
-                      <span>Upload a file</span>
-                      <input 
-                        name="floor_plan" 
-                        type="file" 
-                        className="sr-only" 
-                        accept="image/png, image/jpeg, image/jpg"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                      />
-                    </span>
-                    <p className="pl-1">or drag and drop</p>
-                  </div>
-                  <p className="text-xs leading-5 text-gray-500 mt-2">PNG, JPG, JPEG up to 10MB</p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 relative">
-                <button 
-                  onClick={clearFile}
-                  disabled={loading}
-                  className="absolute top-4 right-4 p-1 bg-white rounded-full text-gray-500 hover:text-gray-700 shadow-sm border border-gray-200 disabled:opacity-50"
-                  aria-label="Remove image"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-                <div className="flex flex-col items-center">
-                  <div className="w-full max-w-sm rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white mb-4">
-                    <img src={preview} alt="Plan preview" className="w-full h-auto object-cover max-h-64" />
-                  </div>
-                  <div className="flex items-center text-sm font-medium text-gray-900">
-                    <FileImage className="h-4 w-4 mr-2 text-blue-500" />
-                    {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-8 flex justify-end gap-x-4">
-              <button
-                type="button"
-                className="text-sm font-semibold leading-6 text-gray-900 px-4 py-2 hover:bg-gray-100 rounded-md transition-colors"
-                onClick={() => navigate('/dashboard')}
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!file || loading}
-                className="inline-flex justify-center items-center rounded-md bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
-                    {statusText}
-                  </>
-                ) : (
-                  'Analyze Floor Plan'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
+      <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: status === 'done' ? 'rgba(16,185,129,0.2)' : status === 'active' ? 'rgba(99,102,241,0.2)' : 'rgba(30,41,59,0.8)',
+        border: `2px solid ${status === 'done' ? '#10b981' : status === 'active' ? '#6366f1' : '#1e293b'}`,
+        transition: 'all .3s',
+      }}>
+        {status === 'done'
+          ? <CheckCircle2 style={{ width: 14, color: '#34d399' }} />
+          : status === 'active'
+          ? <Loader2 style={{ width: 14, color: '#818cf8', animation: 'spin .8s linear infinite' }} />
+          : <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#334155' }} />}
+      </div>
+      <div style={{ flex: 1 }}>
+        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: status === 'pending' ? '#475569' : '#f1f5f9', transition: 'color .3s' }}>
+          {step.label}
+        </p>
+        {status !== 'pending' && (
+          <p style={{ margin: 0, fontSize: 11, color: '#64748b', marginTop: 1 }}>{step.sub}</p>
+        )}
       </div>
     </div>
   );
 }
 
-export default Upload;
+const TIPS = [
+  'Use a clear, high-contrast floor plan image for best detection accuracy.',
+  'PNG or JPG formats work best. Avoid PDF conversions if possible.',
+  'Ensure walls are clearly distinct from background in the image.',
+  'Plans with labeled rooms improve the explainability output.',
+  'Higher resolution images (above 800×600) yield better geometry extraction.',
+];
+
+export default function Upload() {
+  const [file, setFile]           = useState(null);
+  const [preview, setPreview]     = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [activeStep, setActiveStep] = useState(-1);
+  const [tipsOpen, setTipsOpen]   = useState(false);
+  const fileInputRef = useRef(null);
+  const navigate     = useNavigate();
+
+  const handleFileChange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setError('Please upload a valid image file (PNG, JPG).'); return; }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setError('');
+  };
+
+  const clearFile = () => {
+    setFile(null); setPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setIsDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f?.type.startsWith('image/')) { setFile(f); setPreview(URL.createObjectURL(f)); setError(''); }
+  };
+
+  const simulateStep = (idx) => new Promise(res => {
+    setActiveStep(idx);
+    setTimeout(res, 800 + Math.random() * 400);
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) return;
+    setLoading(true);
+    setError('');
+    setActiveStep(0);
+
+    const formData = new FormData();
+    formData.append('floor_plan', file);
+
+    try {
+      await simulateStep(0);
+      await simulateStep(1);
+      await simulateStep(2);
+      await simulateStep(3);
+
+      const response = await api.post('/analysis', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      await simulateStep(4);
+      setActiveStep(5); // all done
+
+      if (response.data.success && response.data.analysis?._id) {
+        setTimeout(() => navigate(`/analysis/${response.data.analysis._id}`), 500);
+      } else if (response.data.success && response.data.report) {
+        // Some backends return the report directly
+        setTimeout(() => navigate(`/analysis/${response.data._id || 'result'}`, { state: { report: response.data.report } }), 500);
+      } else {
+        throw new Error('Unexpected response from server.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Analysis failed. Please try again.');
+      setActiveStep(-1);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex-grow py-12 px-4 relative max-w-3xl mx-auto w-full animate-fade-in">
+      {/* Decorative */}
+      <div className="absolute top-0 left-[-15%] w-[35vw] h-[35vw] rounded-full bg-blue-600/8 filter blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-0 right-[-15%] w-[35vw] h-[35vw] rounded-full bg-indigo-600/8 filter blur-[130px] pointer-events-none" />
+
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">Analyze a Floor Plan</h1>
+          <p className="text-slate-400 font-light">
+            Upload a 2D floor plan image to automatically extract walls, rooms, openings, and generate a 3D model with material recommendations.
+          </p>
+        </div>
+
+        {/* Tips accordion */}
+        <button
+          onClick={() => setTipsOpen(o => !o)}
+          className="w-full mb-6 flex items-center justify-between px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:border-indigo-500/40 transition-all text-sm font-medium"
+        >
+          <span className="flex items-center gap-2"><Info className="w-4 h-4 text-indigo-400" /> Tips for best results</span>
+          {tipsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        {tipsOpen && (
+          <ul className="mb-6 bg-slate-900/60 border border-indigo-500/20 rounded-xl px-5 py-4 space-y-2">
+            {TIPS.map((tip, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-400">
+                <span className="text-indigo-400 font-bold mt-0.5">{i + 1}.</span> {tip}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="mb-5 bg-red-900/25 border border-red-800/40 rounded-xl p-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+            <span className="text-red-200 text-sm">{error}</span>
+          </div>
+        )}
+
+        {/* Upload zone OR preview */}
+        {!file ? (
+          <div
+            className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-all duration-300 px-6 py-20 cursor-pointer ${
+              isDragging
+                ? 'border-indigo-500 bg-indigo-500/8 scale-[1.01]'
+                : 'border-slate-700 bg-slate-900/30 hover:border-indigo-500/50 hover:bg-slate-800/30'
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current.click()}
+          >
+            <div className={`h-20 w-20 rounded-full flex items-center justify-center mb-5 transition-all duration-300 ${
+              isDragging ? 'bg-indigo-500/20 text-indigo-400 scale-110' : 'bg-slate-800 text-slate-500'
+            }`}>
+              <UploadCloud className="h-9 w-9" />
+            </div>
+            <p className="text-lg font-medium text-slate-300 mb-1">
+              <span className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Browse file</span>
+              {' '}or drag and drop
+            </p>
+            <p className="text-sm text-slate-500 font-light">PNG, JPG, JPEG · Max 10 MB</p>
+            <input
+              name="floor_plan" type="file" className="sr-only"
+              accept="image/png,image/jpeg,image/jpg"
+              ref={fileInputRef} onChange={handleFileChange}
+            />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-900/50 p-6 relative">
+            <button
+              onClick={clearFile} disabled={loading}
+              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-red-500/70 border border-slate-700 disabled:opacity-40 transition-all z-10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex flex-col items-center">
+              <div className="w-full max-w-md rounded-xl overflow-hidden border border-slate-700 shadow-xl mb-4 bg-slate-900">
+                <img src={preview} alt="Floor plan preview" className="w-full h-auto object-contain max-h-[320px]" />
+              </div>
+              <div className="flex items-center text-sm text-slate-400 bg-slate-800/70 px-4 py-2 rounded-full border border-slate-700/50">
+                <FileImage className="h-4 w-4 mr-2 text-indigo-400" />
+                {file.name} <span className="mx-2 text-slate-600">·</span> {(file.size / 1024 / 1024).toFixed(2)} MB
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pipeline progress — shown while loading */}
+        {loading && (
+          <div className="mt-6 rounded-2xl border border-slate-700/50 bg-slate-900/60 p-6">
+            <p className="text-sm font-semibold text-slate-300 mb-4">Processing pipeline…</p>
+            <div style={{ borderLeft: '2px solid #1e293b', marginLeft: 13, paddingLeft: 2 }}>
+              {PIPELINE_STEPS.map((step, i) => {
+                const status = activeStep > i ? 'done' : activeStep === i ? 'active' : 'pending';
+                return <PipelineStep key={step.id} step={step} status={status} />;
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-8 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            disabled={loading}
+            className="text-sm font-semibold text-slate-300 px-6 py-3 hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-slate-700 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!file || loading}
+            className="inline-flex justify-center items-center rounded-xl px-8 py-3 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_35px_rgba(79,70,229,0.5)] disabled:opacity-40 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+          >
+            {loading ? (
+              <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Analyzing…</>
+            ) : (
+              'Analyze Floor Plan'
+            )}
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}

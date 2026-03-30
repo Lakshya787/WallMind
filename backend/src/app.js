@@ -7,7 +7,6 @@ const app = express();
 // ✅ Robust CORS setup
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:5174", // Added this because your frontend started on port 5174
   process.env.FRONTEND_URL // Setup this env var in Render
 ].filter(Boolean);
 
@@ -32,7 +31,7 @@ import authRouter from "./routes/auth.route.js";
 //import userRouter from "./routes/user.route.js";
 import analysisRouter from "./routes/analysis.route.js";
 app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/analysis",analysisRouter)
+app.use("/api/v1/analysis", analysisRouter)
 //app.use("/api/v1/user", userRouter);
 
 export { app };
