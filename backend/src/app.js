@@ -16,8 +16,6 @@ app.use(cors({
   credentials: true
 }));
 
-// handle preflight requests (sometimes needed if cors plugin gets confused)
-app.options("*", cors());
 
 /**
  * =========================
