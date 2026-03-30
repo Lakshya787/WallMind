@@ -51,23 +51,28 @@ CFG = {
     "room_fill_max":           253,   # cream upper bound (gray)
     "room_min_area_px":        3000,  # px² — smaller = noise
 
-    # ── Door arc detection ────────────────────────────────────────
+    # ── Door arc detection (smart quadrant check) ────────────────────
     "arc_canny_low":           30,
     "arc_canny_high":          100,
     "arc_dp":                  1.2,
-    "arc_min_dist":            60,    # min px between two arc centres
+    "arc_min_dist":            55,    # min px between two arc centres
     "arc_param1":              60,    # Canny upper threshold in HoughCircles
-    "arc_param2":              24,    # accumulator — higher = fewer false positives
-    "arc_min_radius":          30,
-    "arc_max_radius":          70,
-    "arc_wall_tol":            28,    # px — 2D Euclidean distance to nearest wall ENDPOINT
+    "arc_param2":              20,    # lower accumulator — quadrant filter does real filtering
+    "arc_min_radius":          25,
+    "arc_max_radius":          100,
+    "arc_wall_tol":            35,    # px — 2D proximity to nearest wall ENDPOINT
+    "arc_quadrant_min":        0.18,  # fraction of one quadrant that must have edge pixels
+    "arc_quadrant_max":        0.55,  # if >55% of all quadrants lit → full circle → discard
+    "arc_quadrant_samples":    72,    # points sampled per quadrant (72 = 5° resolution)
 
-    # ── Window detection (gap scan along outer walls) ─────────────
-    "window_scan_thresh":      180,   # gray >= 180 = non-solid
-    "window_gap_min_px":       30,    # minimum gap size — 30 px eliminates thin-line noise
-    "window_gap_max_px":       90,    # above this = door
+    # ── Gap scan — 3-tier opening classification ────────────────────
+    "window_scan_thresh":      180,   # gray ≥ this = non-solid
+    "window_gap_min_px":       28,    # below this = noise
+    "window_gap_max_px":       80,    # window ≤ 80px < door
+    "door_gap_max_px":         160,   # door ≤ 160px < gate
+    # gap > door_gap_max_px → gate
     "window_outer_tol":        5,
-    "window_max_per_wall":     3,     # cap: no wall should have more than 3 openings
+    "window_max_per_wall":     4,     # cap per wall (raised — gate exterior walls may have 2 openings)
 
     # ── Output ────────────────────────────────────────────────────
     "normalize":               True,
@@ -144,41 +149,42 @@ def build_wall_mask(gray: np.ndarray) -> np.ndarray:
 
 def detect_building_boundary(gray: np.ndarray, img_w: int, img_h: int) -> dict:
     """
-    Extracts the outer building footprint as a simplified polygon.
+    Extracts the outer building footprint as an ORTHOGONAL simplified polygon.
 
-    Why this matters:
-      HoughLinesP only finds individual wall SEGMENTS. It cannot reconstruct
-      the overall building shape (L, T, U, etc.) — only isolated line pieces.
-      A contour-based approach finds the connected outer silhouette first,
-      then we convert its edges into wall segments.
+    Why orthogonalize:
+      approxPolyDP returns the mathematically closest polygon to the pixel
+      contour, which includes tiny diagonal edges at corners (45° cuts of
+      2-10 px). In 3D these become obvious slanted walls that look broken.
+      For digital floor plans (always rectilinear) all edges MUST be H or V.
 
     Algorithm:
-      1. Threshold dark pixels (wall_dark_thresh) → binary mask
-      2. Dilate heavily (15px kernel, 3 iter) to close all interior gaps
-         — this merges all wall pixels into one connected blob
-      3. findContours → take the largest external contour
-      4. approxPolyDP (epsilon = 1.5% of arc length) → simplified polygon
-         10-30 vertices for a typical L/U-shaped floor plan
-      5. Convert adjacent polygon vertex pairs to wall segments
-
-    Returns dict with:
-      vertices  : [[x,y], ...] normalised polygon (None if failed)
-      walls     : list of wall dicts for the perimeter edges
+      1. Dark pixel threshold → binary mask
+      2. Heavy dilation (15px, 3 iter) to merge all wall pixels into one blob
+      3. Flood-fill exterior → solid building silhouette
+      4. findContours → largest external contour
+      5. approxPolyDP with epsilon = 4% of perimeter (gives 6-12 vertices for
+         typical L/U shapes, not 20+)
+      6. Orthogonalization pass:
+           a. For each edge, if |dx| > |dy| → force same Y (horizontal edge)
+              else force same X (vertical edge) — adjust the second vertex
+           b. This ensures all edges are axis-aligned
+      7. Remove edges shorter than 40px (corner artefacts after snapping)
+      8. Convert surviving edges to wall dicts (not merged into main walls)
     """
     # Step 1: dark pixel mask
     _, binary = cv2.threshold(gray, CFG["wall_dark_thresh"], 255, cv2.THRESH_BINARY_INV)
 
     # Step 2: aggressive dilation to merge all wall pixels into one blob
-    big_k  = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-    closed = cv2.dilate(binary, big_k, iterations=3)
+    big_k  = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 20))
+    closed = cv2.dilate(binary, big_k, iterations=4)
 
     # Fill holes inside the building so we get a solid silhouette
     flood  = closed.copy()
     h, w   = flood.shape
     mask2  = np.zeros((h + 2, w + 2), dtype=np.uint8)
-    cv2.floodFill(flood, mask2, (0, 0), 255)       # flood white background
-    interior = cv2.bitwise_not(flood)               # invert — interior = white
-    silhouette = cv2.bitwise_or(closed, interior)   # combine wall + interior
+    cv2.floodFill(flood, mask2, (0, 0), 255)
+    interior   = cv2.bitwise_not(flood)
+    silhouette = cv2.bitwise_or(closed, interior)
 
     # Step 3: find outermost contour
     contours, _ = cv2.findContours(silhouette, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -188,28 +194,72 @@ def detect_building_boundary(gray: np.ndarray, img_w: int, img_h: int) -> dict:
 
     outer = max(contours, key=cv2.contourArea)
     area  = cv2.contourArea(outer)
-    log(f"Boundary contour area: {area:.0f} px²  ({len(outer)} pts)")
+    log(f"Boundary contour area: {area:.0f} px²  ({len(outer)} raw pts)")
 
     if area < 5000:
         log("WARN boundary: contour too small, likely noise")
         return {"vertices": None, "walls": []}
 
-    # Step 4: simplify polygon — epsilon = 1.5% of perimeter
-    epsilon = 0.015 * cv2.arcLength(outer, True)
+    # Step 4: simplify polygon with generous epsilon (4% of perimeter)
+    epsilon = 0.04 * cv2.arcLength(outer, True)
     approx  = cv2.approxPolyDP(outer, epsilon, True)
-    pts     = [(int(p[0][0]), int(p[0][1])) for p in approx]
-    log(f"Boundary polygon: {len(pts)} vertices")
+    raw_pts = [(int(p[0][0]), int(p[0][1])) for p in approx]
+    log(f"Boundary approxPolyDP: {len(raw_pts)} vertices (epsilon={epsilon:.1f})")
 
-    # Step 5: convert polygon edges to wall segments
+    # Step 5: Orthogonalization pass — make every edge purely H or V
+    # Walk around the polygon; for each edge decide H or V, then project.
+    ortho_pts = []
+    n = len(raw_pts)
+    if n < 3:
+        return {"vertices": None, "walls": []}
+
+    # Start from the first point unchanged, then project each next point
+    cur = list(raw_pts[0])
+    ortho_pts.append(tuple(cur))
+    for i in range(1, n):
+        nxt = list(raw_pts[i])
+        dx = abs(nxt[0] - cur[0])
+        dy = abs(nxt[1] - cur[1])
+        if dx >= dy:
+            # Horizontal edge → lock Y to previous vertex's Y
+            nxt[1] = cur[1]
+        else:
+            # Vertical edge → lock X to previous vertex's X
+            nxt[0] = cur[0]
+        ortho_pts.append(tuple(nxt))
+        cur = nxt
+
+    # Close back to start: last orthogonal edge back to first vertex
+    # The last vertex might be off — project it so it closes cleanly
+    if len(ortho_pts) >= 2:
+        last  = list(ortho_pts[-1])
+        first = list(ortho_pts[0])
+        dx = abs(first[0] - last[0])
+        dy = abs(first[1] - last[1])
+        if dx >= dy:
+            last[1] = first[1]
+        else:
+            last[0] = first[0]
+        ortho_pts[-1] = tuple(last)
+
+    log(f"Boundary polygon after ortho: {len(ortho_pts)} vertices")
+
+    # Step 6: Convert polygon edges to wall segments (H/V only, min length 40px)
     boundary_walls = []
     wid = 1
-    for i in range(len(pts)):
-        x1, y1 = pts[i]
-        x2, y2 = pts[(i + 1) % len(pts)]
+    for i in range(len(ortho_pts)):
+        x1, y1 = ortho_pts[i]
+        x2, y2 = ortho_pts[(i + 1) % len(ortho_pts)]
         length  = math.hypot(x2 - x1, y2 - y1)
-        if length < 20:          # skip tiny edges (noise)
+        if length < 40:          # skip tiny closing-gap edges
             continue
-        orient = "horizontal" if abs(x2 - x1) >= abs(y2 - y1) else "vertical"
+        # Enforce strictly H or V by re-snapping
+        if abs(x2 - x1) >= abs(y2 - y1):
+            orient = "horizontal"
+            y2 = y1  # ensure exactly horizontal
+        else:
+            orient = "vertical"
+            x2 = x1  # ensure exactly vertical
         boundary_walls.append({
             "id":              f"bw{wid}",
             "orientation":     orient,
@@ -221,10 +271,12 @@ def detect_building_boundary(gray: np.ndarray, img_w: int, img_h: int) -> dict:
         })
         wid += 1
 
+    log(f"Boundary walls: {len(boundary_walls)} orthogonal segments")
     return {
-        "vertices": pts,          # raw pixel coords — normalised later
+        "vertices": list(ortho_pts),   # raw pixel coords — normalised later
         "walls":    boundary_walls,
     }
+
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -472,15 +524,32 @@ def _canonical_wall_coords(walls: list) -> tuple:
 
 def detect_doors(gray: np.ndarray, walls: list) -> list:
     """
-    Detect door arcs via HoughCircles on Canny edges.
+    Smart door-arc detector using QUADRANT COVERAGE CHECK.
 
-    Key rule: a door arc centre MUST be within arc_wall_tol px (Euclidean)
-    of an actual wall ENDPOINT (the hinge point of the door).
-    This is a 2D check — the old 1D check (cy near any horizontal wall Y)
-    was letting rounded furniture (toilets, sinks, round tables) through.
+    Why quadrant check beats simple endpoint proximity:
+      Both a real door arc (quarter-circle) AND round furniture (full circle)
+      will have their centre near a wall endpoint sometimes. The key geometric
+      difference is:
+
+        Door arc   → ONE quadrant has the arc pixels
+        Full circle → ALL FOUR quadrants have arc pixels
+
+    Algorithm:
+      1. HoughCircles finds candidate circles.
+      2. For each candidate, sample 4 × 72 = 288 points on the circumference.
+         Check which points fall on Canny edge pixels.
+      3. Count edge-hits per quadrant (Q0=top-right, Q1=top-left, Q2=btm-left, Q3=btm-right).
+      4. Let best_q = max(quadrant_hits) / total_samples
+         Let total  = sum(quadrant_hits > min_thresh) / 4  (fraction of quadrants lit)
+      5. Accept if:  arc_quadrant_min ≤ best_q   (at least one strong quadrant)
+                AND  total ≤ arc_quadrant_max      (not all four quadrants lit)
+      6. Apply wall-endpoint proximity check (arc centre within arc_wall_tol px).
+
+    Returns list of door dicts with 'arc_quadrant' field (dominant quadrant 0-3).
     """
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     edges   = cv2.Canny(blurred, CFG["arc_canny_low"], CFG["arc_canny_high"])
+    h_img, w_img = edges.shape
 
     circles = cv2.HoughCircles(
         edges,
@@ -496,18 +565,46 @@ def detect_doors(gray: np.ndarray, walls: list) -> list:
     if circles is None:
         return []
 
-    # Build a flat list of all wall ENDPOINTS for 2D proximity check
-    tol_sq = CFG["arc_wall_tol"] ** 2
+    # Pre-compute wall endpoints for 2D proximity check
+    tol_sq    = CFG["arc_wall_tol"] ** 2
     endpoints = []
     for w in walls:
-        endpoints.append(w["start"])   # [x, y] pixel coords
+        endpoints.append(w["start"])
         endpoints.append(w["end"])
+
+    n_q    = CFG["arc_quadrant_samples"]  # 72 samples per quadrant
+    q_min  = CFG["arc_quadrant_min"]
+    q_max  = CFG["arc_quadrant_max"]
+    angles = [i * (2 * math.pi / (4 * n_q)) for i in range(4 * n_q)]
 
     doors = []
     did   = 1
 
     for (cx, cy, r) in np.round(circles[0]).astype(int):
-        # 2D Euclidean check: must be close to at least one wall endpoint
+        # — Quadrant coverage test —
+        q_hits = [0, 0, 0, 0]
+        total_samples = 4 * n_q
+        for a in angles:
+            sx = int(round(cx + r * math.cos(a)))
+            sy = int(round(cy + r * math.sin(a)))
+            if 0 <= sx < w_img and 0 <= sy < h_img:
+                if edges[sy, sx] > 0:
+                    # Determine quadrant: Q0=cos>0,sin<0  Q1=cos<0,sin<0
+                    #                     Q2=cos<0,sin>0  Q3=cos>0,sin>0
+                    qi = (0 if math.cos(a) >= 0 and math.sin(a) < 0 else
+                          1 if math.cos(a) <  0 and math.sin(a) < 0 else
+                          2 if math.cos(a) <  0 and math.sin(a) >= 0 else 3)
+                    q_hits[qi] += 1
+
+        best_q_frac  = max(q_hits) / total_samples
+        n_lit_quads  = sum(1 for q in q_hits if q / (n_q) >= q_min)
+        total_frac   = n_lit_quads / 4.0
+
+        # Accept: exactly 1-2 quadrants lit (quarter-to-half arc), not a full circle
+        if best_q_frac < q_min or total_frac > q_max:
+            continue
+
+        # — Wall-endpoint proximity test —
         near_endpoint = any(
             (cx - ex) ** 2 + (cy - ey) ** 2 <= tol_sq
             for ex, ey in endpoints
@@ -515,35 +612,35 @@ def detect_doors(gray: np.ndarray, walls: list) -> list:
         if not near_endpoint:
             continue
 
+        arc_quadrant = int(np.argmax(q_hits))
         doors.append({
-            "id":        f"door{did}",
-            "type":      "door",
-            "position":  [int(cx), int(cy)],
-            "radius_px": int(r),
-            "source":    "arc",
+            "id":            f"door{did}",
+            "type":          "door",
+            "position":      [int(cx), int(cy)],
+            "radius_px":     int(r),
+            "source":        "arc",
+            "arc_quadrant":  arc_quadrant,    # 0-3, dominant swing direction
+            "arc_confidence": round(best_q_frac, 3),
         })
         did += 1
 
+    log(f"Arc-detected doors (quadrant-filtered): {len(doors)}")
     return doors
 
 
 def detect_windows(gray: np.ndarray, walls: list) -> list:
     """
-    Strategy: scan along each wall segment looking for gaps.
+    Scan along each wall for bright gaps and classify into 3 tiers:
 
-    WHY scan threshold=150 (not 50)?
-      Windows in this image type have a thin interior frame line (~gray 84-108)
-      that sits inside a wider opening (~gray 255 between the frames).
-      Using threshold=50 misses the window entirely because the frame pixels
-      read as a wall pixel and the "gap" appears to be only 1-2 px wide.
-      Using threshold=150 treats the frame lines as "not a solid wall",
-      so the entire window opening (frame-to-frame) registers as a gap.
-      Confirmed from pixel analysis: top-wall window at x=131-238 has
-      gray[77, 184]=84 (frame line), gray[77, 160]=255 (opening between frames).
+      gap_len < window_gap_min_px                       → noise (skip)
+      window_gap_min_px ≤ gap_len ≤ window_gap_max_px   → window
+      window_gap_max_px < gap_len ≤ door_gap_max_px     → door
+      gap_len > door_gap_max_px                         → gate
 
-    Gap classification:
-      window_gap_min_px  (15) < gap_len ≤ window_gap_max_px (120)  → window
-      gap_len > window_gap_max_px                                   → door
+    Approximate real-world sizes (image @ ~1px/cm scale):
+      window ≤ 80px  ≅ 0.8 m  (standard window)
+      door   ≤ 160px ≅ 1.5 m  (interior door)
+      gate   > 160px ≅ 1.5m+ (main entrance, garage, compound gate)
     """
     windows  = []
     wnd_id   = 1
@@ -582,8 +679,13 @@ def detect_windows(gray: np.ndarray, walls: list) -> list:
                         mx    = int(round(x1 + mid_t * (x2 - x1)))
                         my    = int(round(y1 + mid_t * (y2 - y1)))
 
-                        w_type = ("window" if gap_len <= CFG["window_gap_max_px"]
-                                  else "door")
+                        # 3-tier classification
+                        if gap_len <= CFG["window_gap_max_px"]:
+                            w_type = "window"
+                        elif gap_len <= CFG["door_gap_max_px"]:
+                            w_type = "door"
+                        else:
+                            w_type = "gate"
 
                         windows.append({
                             "id":       f"window{wnd_id}",
@@ -594,11 +696,11 @@ def detect_windows(gray: np.ndarray, walls: list) -> list:
                             "source":   "gap",
                         })
                         wnd_id += 1
-                        # Cap: max openings per wall to prevent noise floods
-                        wall_openings_count = sum(
+                        # Cap per wall
+                        wall_count = sum(
                             1 for w in windows if w.get("wall_id") == wall["id"]
                         )
-                        if wall_openings_count >= CFG["window_max_per_wall"]:
+                        if wall_count >= CFG["window_max_per_wall"]:
                             break
                     in_gap = False
 
@@ -607,41 +709,82 @@ def detect_windows(gray: np.ndarray, walls: list) -> list:
 
 def detect_openings(gray: np.ndarray, walls: list) -> list:
     """
-    Detect ALL openings (doors + windows) exclusively via wall-gap scanning.
+    Arc-Gap Fusion: combines smart arc detection with wall-gap scanning.
 
-    WHY arc detection was removed:
-      HoughCircles detects CIRCLES, not door arcs. Quarter-circle door swings
-      produce a full circle only when the image is very clean — but floor plans
-      also contain: round stair markers, oval furniture, circular column symbols,
-      scale circles, and legend dots. Every one of these fires as a 'door' even
-      after the endpoint proximity filter, because in a dense plan there is always
-      a wall endpoint within 28px of some circle.
+    Strategy:
+      1. Gap scan produces initial window/door/gate classifications.
+      2. Arc detector finds quarter-circle door arcs (quadrant-filtered).
+      3. For each arc, find the nearest gap-detected opening within 2×radius.
+         • If found and it was a 'window', promote it to 'door' (arc confirms).
+         • If found and it was a 'door', keep as 'door' (confirmed by two sources).
+         • If found and it was a 'gate', keep as 'gate' (gates don't have arcs).
+         • If no gap found nearby, add the arc as a new 'door' entry.
+      4. Remove stale arc-only duplicates that have a gap match (arc position
+         is less precise than the gap midpoint for 3D rendering).
 
-      Wall-gap scanning is WALL-ANCHORED: it walks pixel-by-pixel along each
-      detected wall and only records an opening where the actual wall line
-      has a bright gap in it. This is physically correct — a door or window
-      IS a gap in a wall. No gap in a wall → no opening. This is immune to
-      furniture, text, scale bars, and all other circular symbols.
-
-    Gap classification (unchanged):
-      window_gap_min_px  ≤ gap_len ≤ window_gap_max_px  → window
-      gap_len > window_gap_max_px                        → door
+    This approach works for BOTH plan types:
+      • Plans WITH arcs: arcs confirm doors, improve precision.
+      • Plans WITHOUT arcs: falls back to pure gap scan (arc list is empty).
     """
     gap_openings = detect_windows(gray, walls)
+    arc_doors    = detect_doors(gray, walls)
 
-    # Re-ID sequentially and log
-    for i, item in enumerate(gap_openings, start=1):
+    if not arc_doors:
+        # No arcs — pure gap scan (common for simplified/schematic plans)
+        for i, item in enumerate(gap_openings, start=1):
+            item["id"] = f"o{i}"
+        n_d = sum(1 for o in gap_openings if o["type"] == "door")
+        n_w = sum(1 for o in gap_openings if o["type"] == "window")
+        n_g = sum(1 for o in gap_openings if o["type"] == "gate")
+        log(f"Openings (gap-only): {n_w} windows, {n_d} doors, {n_g} gates")
+        return gap_openings
+
+    # Arc-gap fusion
+    fused = list(gap_openings)   # start with all gap detections
+    arc_matched = set()          # indices into fused that were confirmed by an arc
+
+    for arc in arc_doors:
+        ax, ay = arc["position"]
+        ar     = arc.get("radius_px", 50)
+        snap_radius_sq = (ar * 2) ** 2
+
+        best_idx  = None
+        best_dist = float("inf")
+        for idx, gap in enumerate(fused):
+            gx, gy = gap["position"]
+            d = (ax - gx) ** 2 + (ay - gy) ** 2
+            if d < snap_radius_sq and d < best_dist:
+                best_dist = d
+                best_idx  = idx
+
+        if best_idx is not None:
+            # Arc confirms an existing gap entry
+            if fused[best_idx]["type"] == "window":
+                fused[best_idx]["type"] = "door"   # promote window → door
+                fused[best_idx]["arc_confirmed"] = True
+            arc_matched.add(best_idx)
+        else:
+            # No gap nearby — add arc as standalone door
+            fused.append({
+                "id":            arc["id"],
+                "type":          "door",
+                "position":      arc["position"],
+                "radius_px":     ar,
+                "wall_id":       None,
+                "source":        "arc",
+                "arc_confirmed": True,
+            })
+
+    # Re-ID sequentially
+    for i, item in enumerate(fused, start=1):
         item["id"] = f"o{i}"
 
-    n_doors   = sum(1 for o in gap_openings if o["type"] == "door")
-    n_windows = sum(1 for o in gap_openings if o["type"] == "window")
-    log(f"Gap-scan openings: {n_doors} doors, {n_windows} windows "
-        f"(arc detection disabled — wall-gap only)")
-
-    return gap_openings
-
-
-
+    n_d = sum(1 for o in fused if o["type"] == "door")
+    n_w = sum(1 for o in fused if o["type"] == "window")
+    n_g = sum(1 for o in fused if o["type"] == "gate")
+    log(f"Openings (arc+gap fusion): {n_w} windows, {n_d} doors, {n_g} gates "
+        f"({len(arc_doors)} arcs, {len(arc_matched)} matched to gaps)")
+    return fused
 
 # ══════════════════════════════════════════════════════════════════
 # STEP 6 — Coordinate normalisation
@@ -1339,23 +1482,28 @@ def parse_floor_plan(image_path: str) -> dict:
         log(f"WARN boundary detection failed: {exc}")
 
     # ── Stage 03: Interior walls (Hough) ─────────────────────────
-    walls = []
+    interior_walls = []
     try:
-        walls = detect_walls(wall_mask, img_w, img_h)
-        # Merge boundary walls with interior Hough walls
-        # Keep boundary walls separate so they're always rendered correctly
-        walls = boundary_walls + walls
-        lb    = sum(1 for w in walls if "load_bearing" in w["structural_type"])
-        log(f"Walls: {len(walls)} total ({len(boundary_walls)} boundary + "
-            f"{len(walls)-len(boundary_walls)} interior), {lb} load-bearing")
+        interior_walls = detect_walls(wall_mask, img_w, img_h)
+        lb = sum(1 for w in interior_walls if "load_bearing" in w["structural_type"])
+        log(f"Interior Hough walls: {len(interior_walls)} ({lb} load-bearing)")
     except Exception as exc:
         log(f"WARN wall detection failed: {exc}")
-        walls = boundary_walls  # fallback: at least render the perimeter
+
+    # NOTE: boundary_walls are kept SEPARATE from interior_walls intentionally.
+    # - BuildingPerimeter3D (frontend) renders boundary_walls via the perimeter polygon.
+    # - Wall3D renders interior_walls only.
+    # Merging them caused 44 walls and doubled rendering in the 3D viewer.
+    # We still pass ALL walls combined for room detection (needs full wall context),
+    # but only interior_walls go into the scene JSON "walls" array.
+    walls_for_rooms    = boundary_walls + interior_walls
+    walls_for_openings = interior_walls  # only scan interior walls for gaps
+    walls              = interior_walls  # this goes into the JSON output
 
     # ── Stage 04: Rooms ──────────────────────────────────────────
     rooms = []
     try:
-        rooms = detect_rooms(gray, walls, boundary_vertices=boundary_vertices)
+        rooms = detect_rooms(gray, walls_for_rooms, boundary_vertices=boundary_vertices)
         log(f"Rooms: {len(rooms)} detected")
     except Exception as exc:
         log(f"WARN room detection failed: {exc}")
@@ -1363,7 +1511,8 @@ def parse_floor_plan(image_path: str) -> dict:
     # ── Stage 05: Openings ───────────────────────────────────────
     openings = []
     try:
-        openings = detect_openings(gray, walls)
+        openings = detect_openings(gray, walls_for_openings)
+
         n_doors   = sum(1 for o in openings if o["type"] == "door")
         n_windows = sum(1 for o in openings if o["type"] == "window")
         log(f"Openings: {n_doors} doors, {n_windows} windows")
