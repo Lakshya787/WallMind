@@ -4,29 +4,58 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
-// ✅ Robust CORS setup
+/**
+ * =========================
+ * CORS CONFIG (SAFE + WORKING)
+ * =========================
+ */
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL // Setup this env var in Render
-].filter(Boolean);
+  "https://wall-mind.vercel.app"
+];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // allow requests with no origin (mobile apps, postman, curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    return callback(new Error("CORS not allowed"));
+
+    // ❗ DO NOT throw error → just block silently
+    return callback(null, false);
   },
   credentials: true
 }));
 
-// Middlewares
+// handle preflight requests
+app.options("*", cors());
+
+/**
+ * =========================
+ * MIDDLEWARES
+ * =========================
+ */
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
-// Routes
+/**
+ * =========================
+ * HEALTH CHECK (IMPORTANT)
+ * =========================
+ */
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
+/**
+ * =========================
+ * ROUTES
+ * =========================
+ */
 import authRouter from "./routes/auth.route.js";
 import analysisRouter from "./routes/analysis.route.js";
 import paymentRouter from "./routes/payment.route.js";
@@ -34,6 +63,18 @@ import paymentRouter from "./routes/payment.route.js";
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/analysis", analysisRouter);
 app.use("/api/v1/payment", paymentRouter);
-//app.use("/api/v1/user", userRouter);
+
+/**
+ * =========================
+ * ERROR HANDLER (OPTIONAL BUT GOOD)
+ * =========================
+ */
+app.use((err, req, res, next) => {
+  console.error("Error:", err.message);
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal Server Error"
+  });
+});
 
 export { app };
